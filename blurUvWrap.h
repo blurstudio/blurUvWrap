@@ -25,21 +25,17 @@ public:
     virtual MStatus deform(MDataBlock& block, MItGeometry& iter, const MMatrix& mat, unsigned int multiIndex);
     static MTypeId id;
 
-	static MObject aTargetMesh;
-	static MObject aTargetWorld;
-	static MObject aSourceInvWorld;
-
+	static MObject aControlRestMesh;
+	static MObject aControlMesh;
+	static MObject aControlInvWorld;
+	static MObject aControlUvName;
+	static MObject aRestMesh;
+	static MObject aUvName;
+	static MObject aGlobalOffset;
 	static MObject aOffsetList;
 	static MObject aOffsetMult;
 	static MObject aOffsetWeights;
-	static MObject aSourceUvName;
-	static MObject aTargetUvName;
 	static MObject aMismatchHandler;
-
-
-
-
-
 
 };
 

@@ -106,7 +106,7 @@ void sweep(
 			bool found = false;
 			for (auto &t : atSet){
 				if (ymns[t] <= yv && yv <= ymxs[t]){
-					if (pointInTri(qPoint, uvs[tris[3*t]], uvs[tris[3*t+1]], uvs[tri[3*t+2]])){
+					if (pointInTri(qPoint, uvs[tris[3*t]], uvs[tris[3*t+1]], uvs[tris[3*t+2]])){
 						out[qpIdx] = t;
 						found = true;
 						break;
