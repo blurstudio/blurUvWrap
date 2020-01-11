@@ -11,6 +11,8 @@ set(SOURCE_FILES
     "blurUvWrap.cpp"
     "blurUvWrap.h"
     "uvQuery.cpp"
+    "uvQuery.h"
+    "uvMath.h"
     "pluginRegister.cpp"
 )
 
