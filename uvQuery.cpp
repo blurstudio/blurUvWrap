@@ -44,7 +44,7 @@ void sweep(
 	// build a data structure indexing into tris based on the
 	// min/max bounding box of each triangle
 	size_t numTris = tris.size() / 3;
-	std::vector<size_t> ymxs(numTris), ymns(numTris), xmxs(numTris), xmns(numTris);
+	std::vector<double> ymxs(numTris), ymns(numTris), xmxs(numTris), xmns(numTris);
 	for (size_t i=0; i<numTris; ++i){
 		size_t a = 3*i;
 		xmns[i] = min(uvs[tris[a]][0], min(uvs[tris[a+1]][0], uvs[tris[a+2]][0]));

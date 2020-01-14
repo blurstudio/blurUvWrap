@@ -1,4 +1,5 @@
 #include <vector>
+#include "uvMath.h"
 
 // Sweep line algorithm for finding which triangle contains a given query point
 // but for a list of query points
