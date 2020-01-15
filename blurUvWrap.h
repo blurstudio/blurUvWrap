@@ -20,9 +20,6 @@ public:
 	UvWrapDeformer() {};
 	virtual ~UvWrapDeformer() {};
 
-
-
-
     static void* creator();
     static MStatus initialize();
     virtual MStatus deform(MDataBlock& block, MItGeometry& iter, const MMatrix& mat, unsigned int multiIndex);

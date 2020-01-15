@@ -5,7 +5,9 @@
 #include <array>
 #include <algorithm>
 #include <memory>
-
+#include <unordered_set>
+#include <unordered_map>
+#include <utility>
 
 #include <maya/MItGeometry.h>
 #include <maya/MFloatVectorArray.h>
@@ -34,7 +36,6 @@
 
 #define EPS 1e-7
 
-typedef std::array<double, 2> uv_t;
 
 MTypeId UvWrapDeformer::id(0x00122707);
 MObject UvWrapDeformer::aControlRestMesh; // The non-deforming rest of the controller mesh
@@ -158,16 +159,25 @@ std::vector<uv_t> getUvArray(MFnMesh &mesh, const MString* uvSet) {
 	return uvs;
 }
 
+edge_t sortEdge(size_t a, size_t b) {
+	if (a < b) return { a, b };
+	return { b, a };
+}
+
+
+
 void getTriangulation(
 	MFnMesh &mesh, const MString* uvSet,
 
 	std::vector<size_t> &flatUvTriIdxs, // The flattened uv triangle indexes
 	std::vector<size_t> &triToFaceIdx,  // Vector to get the faceIdx given the triangleIdx
-	std::vector<size_t> &faceRanges     // The faceVert index range for a given faceIdx
+	std::vector<size_t> &faceRanges,    // The faceVert index range for a given faceIdx
+	std::vector<edge_t> &borders,       // The list of border edges
+	std::vector<size_t> &borderTriIdx   // Get the triangle index based off the border edge index
 ){
-
 	// Get the triangulated UVs
 	// Also get the face index of each uv triangle
+	std::unordered_map<edge_t, size_t> borderToTri;
 	MIntArray triCounts, triIdxOffsets, uvCounts, uvIdxs;
 	mesh.getTriangleOffsets(triCounts, triIdxOffsets); // numTrisPerFace, flatTriIdxs
 	mesh.getAssignedUVs(uvCounts, uvIdxs, uvSet); // numUvsPerFace, flatUvIdxs
@@ -181,22 +191,61 @@ void getTriangulation(
 	size_t uvCursor = 0;
 	for (unsigned faceIdx = 0; faceIdx < triCounts.length(); ++faceIdx) {
 		unsigned numFaceTris = triCounts[faceIdx];
-		faceRanges.push_back(faceRanges.back() + uvCounts[faceIdx]);
+		unsigned uvCount = uvCounts[faceIdx];
+		faceRanges.push_back(faceRanges.back() + uvCount);
 
+		// Search for border edges
+		for (unsigned ei = 0; ei < uvCount; ++ei) {
+			unsigned ein = (ei + 1) % uvCount;
+			unsigned uv1 = uvIdxs[uvCursor + ei];
+			unsigned uv2 = uvIdxs[uvCursor + ein];
+
+			edge_t edge = sortEdge(uv1, uv2);
+
+			// Populate the map for keeping the triIdx for later
+			auto mapIt = borderToTri.find(edge);
+			if (mapIt == borderToTri.end()) borderToTri[edge] = 0;
+			else borderToTri.erase(mapIt);
+		}
+
+		// Build the uv triangle idxs
 		for (unsigned triNum = 0; triNum < numFaceTris; ++triNum) {
+			size_t triIdx = triToFaceIdx.size();
 			triToFaceIdx.push_back(faceIdx);
 			unsigned triStart = (triCursor + triNum) * 3;
 			// get the 3 uv idxs of a triangle
-			flatUvTriIdxs.push_back(uvIdxs[uvCursor + triIdxOffsets[triStart + 0]]);
-			flatUvTriIdxs.push_back(uvIdxs[uvCursor + triIdxOffsets[triStart + 1]]);
-			flatUvTriIdxs.push_back(uvIdxs[uvCursor + triIdxOffsets[triStart + 2]]);
+			size_t a = uvIdxs[uvCursor + triIdxOffsets[triStart + 0]];
+			size_t b = uvIdxs[uvCursor + triIdxOffsets[triStart + 1]];
+			size_t c = uvIdxs[uvCursor + triIdxOffsets[triStart + 2]];
+
+			// Add those indices to the flat triangle list
+			flatUvTriIdxs.push_back(a);
+			flatUvTriIdxs.push_back(b);
+			flatUvTriIdxs.push_back(c);
+
+			// Check for border edges of the triangle
+			auto ab = borderToTri.find(sortEdge(a, b));
+			auto bc = borderToTri.find(sortEdge(b, c));
+			auto ac = borderToTri.find(sortEdge(a, c));
+
+			// If the edge is a border, keep track of the triIdx for it
+			if (ab != borderToTri.end()) ab->second = triIdx;
+			if (bc != borderToTri.end()) bc->second = triIdx;
+			if (ac != borderToTri.end()) ac->second = triIdx;
+
 		}
 		triCursor += triCounts[faceIdx];
 		uvCursor += uvCounts[faceIdx];
 	}
+
+	// Put the border edges and border tri indices into a simpler structure
+	std::vector<size_t> borderTriIdx;
+	for (auto &kv : borderToTri) {
+		borders.push_back(kv.first);
+		borderTriIdx.push_back(kv.second);
+	}
+
 }
-
-
 
 // Get a pointer to the MArrayDataHandle if it exists
 std::unique_ptr<MArrayDataHandle> getArrayDataPtr(
@@ -229,10 +278,6 @@ float readArrayDataPtr(std::unique_ptr<MArrayDataHandle> &ptr, unsigned int idx,
 	}
 	return wVal;
 }
-
-
-
-
 
 MStatus UvWrapDeformer::deform(
     MDataBlock& block, MItGeometry& iter,
@@ -271,20 +316,25 @@ MStatus UvWrapDeformer::deform(
 	std::vector<size_t> flatUvTriIdxs; // The flattened uv triangle indexes
 	std::vector<size_t> triToFaceIdx;  // Vector to get the faceIdx given the triangleIdx
 	std::vector<size_t> faceRanges;    // The faceVert index range for a given faceIdx
-	getTriangulation(fnRestCtrl, &ctrlUvName, flatUvTriIdxs, triToFaceIdx, faceRanges);
+	std::vector<edge_t> borderEdges;   // The pairs of edge idxs
+	std::vector<size_t> borderTriIdx;  // Get the triangle index based off the border edge index
+
+	getTriangulation(fnRestCtrl, &ctrlUvName, flatUvTriIdxs, triToFaceIdx, faceRanges, borderEdges, borderTriIdx);
 
 	// Sweep the UVs
 	std::vector<size_t> out;         // the tri-index per qPoint
 	std::vector<size_t> missing;     // Any qPoints that weren't in a triangle
-	sweep(qPoints, uvs, flatUvTriIdxs, out, missing);
+	std::vector<uv_t> barys;         // The barycentric coordinates of each point in the triangle
+	sweep(qPoints, uvs, flatUvTriIdxs, out, missing, barys);
 
-	// Project to the closest uv border edge
-	// TODO
-
+	// Project any missing uvs to the closest uv border edge
+	// And add the triangle to the output
+	// TODO: Find the barycentric coords of the missing points as well
+	handleMissing(uvs, borderEdges, missing, borderTriIdx, out);
 
 
 	// Because there's no default constructor, get a pointer to a MArrayDataHandle
-	// So I don't have to re-walk the data block for the plug I want
+	// That way I can just check for null and I don't have to re-walk the data block for the plug I want
 	std::unique_ptr<MArrayDataHandle> hOffsetPtr = getArrayDataPtr(block, aOffsetList, aOffsetWeights, multiIndex);
 	std::unique_ptr<MArrayDataHandle> hWeightPtr = getArrayDataPtr(block, weightList, weights, multiIndex);
 
@@ -292,11 +342,14 @@ MStatus UvWrapDeformer::deform(
 		float oVal = readArrayDataPtr(hOffsetPtr, iter.index(), 1.0);
 		float wVal = readArrayDataPtr(hWeightPtr, iter.index(), 1.0);
 
+		// TEMPORARY: Just do a push to make sure that the deformer is properly running
 		MPoint pt = iter.position();
 		MVector n = iter.normal();
 		pt += (n * (oVal * wVal * env));
 		iter.setPosition(pt);
+
 	}
 
     return MStatus::kSuccess;
 }
+

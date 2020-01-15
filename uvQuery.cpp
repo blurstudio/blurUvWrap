@@ -14,6 +14,7 @@ using std::min;
 using std::max;
 
 
+
 // Build a vector of indexes that sort another vector
 template <typename T>
 std::vector<size_t> argsort(const std::vector<T> &v) {
@@ -39,7 +40,9 @@ void sweep(
 		const std::vector<size_t> &tris,  // the flattened triangle indexes
 
 		std::vector<size_t> &out,         // the tri-index per qPoint
-		std::vector<size_t> &missing      // Any qPoints that weren't in a triangle
+		std::vector<size_t> &missing,     // Any qPoints that weren't in a triangle
+		std::vector<uv_t> &barys          // The barycentric coordinates
+		
 ){
 	// build a data structure indexing into tris based on the
 	// min/max bounding box of each triangle
@@ -141,4 +144,83 @@ void sweep(
 	}
 }
 
+
+size_t closestBruteForceEdge(
+	const std::vector<uv_t> &a,
+	const std::vector<uv_t> &d,
+	const std::vector<double> &dr2,
+	const uv_t &pt
+) {
+	// Get the closest edge index via brute force
+	// A is the collection of start points
+	// D is the collection of direction vectors
+	// DR2 is the colletion of squared lengths of the direction vectors
+	// Pt is the single point to check
+	double minIdx = 0;
+	double minVal = std::numeric_limits<double>::max();
+
+	for (size_t i = 0; i < a.size(); ++i) {
+		const uv_t &aa = a[i];
+		const uv_t &dd = d[i];
+
+		// Get the lerp value of the projection of the point onto a->d
+		// dot((pt - a[i]), d) / dr2[i]
+		double lerp = (((pt[0] - aa[0]) * dd[0]) + ((pt[1] - aa[1]) * dd[1])) / dr2[i];
+		// clamp(lerp, 0, 1)
+		lerp = (lerp < 0.0) ? 0.0 : ((lerp > 1.0) ? 1.0 : lerp);
+
+		// Get the vector from the point to the projection
+		// (d * lerp) + a - pt
+		double c0 = (dd[0] * lerp) + aa[0] - pt[0];
+		double c1 = (dd[1] * lerp) + aa[1] - pt[1];
+
+		// Square that length
+		double l2 = (c0 *c0) + (c1 * c1);
+
+		if (l2 < minVal) {
+			minVal = l2;
+			minIdx = i;
+		}
+	}
+	return minIdx;
+}
+
+
+
+void handleMissing(
+	const std::vector<uv_t> &uvs,
+	const std::vector<edge_t> &borders,
+	const std::vector<size_t> &missing,
+	const std::vector<size_t> &borderToTri,
+	std::vector<size_t> &triIdxs
+) {
+	float tol = 1.0f;
+
+	// In the future, I will definitely need to do a
+	// better search algorithm for this, but for now I can just handle it
+	// with a brute force search
+
+	std::vector<uv_t> starts;
+	std::vector<uv_t> bDiff;
+	std::vector<double> bLens2;
+	bDiff.reserve(borders.size());
+	bLens2.reserve(borders.size());
+	starts.reserve(borders.size());
+	for (size_t i = 0; i < borders.size(); ++i) {
+		uv_t uv1 = uvs[borders[i][0]];
+		uv_t uv2 = uvs[borders[i][1]];
+		uv_t diff = { uv2[0] - uv1[0], uv2[1] - uv1[1] };
+		double delta = diff[1] - diff[0];
+		bLens2.push_back(delta * delta);
+		bDiff.push_back(std::move(diff));
+		starts.push_back(uv1);
+	}
+
+	for (auto &mIdx : missing) {
+		uv_t mp = uvs[mIdx];
+		size_t closestEdge = closestBruteForceEdge(starts, bDiff, bLens2, mp);
+		size_t triIdx = borderToTri[closestEdge];
+		triIdxs[mIdx] = triIdx;
+	}
+}
 
