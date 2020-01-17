@@ -42,7 +42,6 @@ void sweep(
 		std::vector<size_t> &out,         // the tri-index per qPoint
 		std::vector<size_t> &missing,     // Any qPoints that weren't in a triangle
 		std::vector<uv_t> &barys          // The barycentric coordinates
-		
 ){
 	// build a data structure indexing into tris based on the
 	// min/max bounding box of each triangle
@@ -240,4 +239,84 @@ void handleMissing(
 		barys[mIdx] = { b1, b2 };
 	}
 }
+
+// Take the uv barycentric mapping and turn it into a vertex barycetnric mapping
+// This is done by averaging the influence when a vertex has multiple uvs
+void getVertCorrelation(
+	size_t numVerts,                      // The number of vertices in the query mesh
+	size_t numUVs,                        // The number of uvs in the query mesh
+	const std::vector<size_t> &triIdxs,   // The tri-index per query point
+	const std::vector<size_t> &vertTris,  // The triangle *vertex* indices
+	const std::vector<uv_t> &barys,       // The first two barycentric coordinates of each point in the triangle
+	const std::vector<size_t> &uvToVert,  // Map from the query uvIdx to the query vert Idx
+
+	std::vector<double> &flatBarys, // The flattened barycentric coordinates
+	std::vector<size_t> &flatIdxs,  // The flattened barycentric indices
+	std::vector<size_t> &flatRanges // The count of barycentric weights per index
+) {
+	// Invert the uvToVert 
+	std::vector<std::vector<size_t>> vertToUvs;
+	vertToUvs.resize(numVerts);
+	for (size_t uvIdx = 0; uvIdx < uvToVert.size(); ++uvIdx) {
+		vertToUvs[uvToVert[uvIdx]].push_back(uvIdx);
+	}
+
+	// TODO: If a vert has multiple UV's, ignore any missing unless all are missing
+	// Get the next missing index
+	// If there are no missing indices, then use a highly unlikely index value to test against
+	//size_t miss = (missing.empty()) ? std::numeric_limits<size_t>::max() : missing.front();
+
+	std::vector<std::vector<double>> outBarys;
+	std::vector<std::vector<size_t>> outIdxs;
+	outBarys.resize(numVerts);
+	outIdxs.resize(numVerts);
+
+	size_t flatNum = 0;
+	for (size_t vIdx = 0; vIdx < numVerts; ++vIdx) {
+		std::vector<size_t> &uvIdxs = vertToUvs[vIdx];
+		double idxInv = 1.0 / uvIdxs.size();
+
+		for (auto &uvIdx : uvIdxs) {
+			// add the weighted value
+			size_t triIdx = triIdxs[uvIdx];
+			flatNum += 3;
+
+			// barycentric weights for the verts
+			uv_t bary = barys[uvIdx];
+			double b0 = bary[0];
+			double b1 = bary[1];
+			double b2 = 1.0 - b0 - b1;
+			outBarys[vIdx].push_back(b0*idxInv);
+			outBarys[vIdx].push_back(b1*idxInv);
+			outBarys[vIdx].push_back(b2*idxInv);
+
+			// vertIdxs a, b, c
+			size_t via = vertTris[3*triIdx + 0];
+			size_t vib = vertTris[3*triIdx + 1];
+			size_t vic = vertTris[3*triIdx + 2];
+			outIdxs[vIdx].push_back(via);
+			outIdxs[vIdx].push_back(vib);
+			outIdxs[vIdx].push_back(vic);
+		}
+	}
+
+	// Flatten the outputs
+	flatBarys.reserve(flatNum);
+	flatIdxs.reserve(flatNum);
+	flatRanges.reserve(numVerts+1);
+	flatRanges.push_back(0);
+	for (size_t i = 0; i < outBarys.size(); ++i) {
+		size_t count = 0;
+		for (size_t j = 0; j < outBarys[i].size(); ++j) {
+			double ob = outBarys[i][j];
+			if (ob != 0.0) {
+				count++;
+				flatBarys.push_back(ob);
+				flatIdxs.push_back(outIdxs[i][j]);
+			}
+		}
+		flatRanges.push_back(flatRanges.back() + count);
+	}
+}
+
 

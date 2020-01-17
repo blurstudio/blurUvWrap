@@ -13,6 +13,8 @@ set(SOURCE_FILES
     "blurUvWrap.h"
     "uvQuery.cpp"
     "uvQuery.h"
+    "mayaQuery.cpp"
+    "mayaQuery.h"
     "uvMath.h"
     "pluginRegister.cpp"
 )
