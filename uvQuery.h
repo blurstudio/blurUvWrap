@@ -1,7 +1,20 @@
+#pragma once
 #include <vector>
+#include <utility>
 #include "uvMath.h"
 
 typedef std::array<size_t, 2> edge_t;
+
+struct edgeHash {
+	template <class T1>
+	size_t operator()(const std::array<T1, 2> &edge) const {
+		std::hash<T1> hasher;
+		size_t h1 = hasher(edge[0]);
+		size_t h2 = hasher(edge[1]);
+		return h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+	}
+};
+
 // Sweep line algorithm for finding which triangle contains a given query point
 // but for a list of query points
 void sweep(
@@ -22,9 +35,12 @@ size_t closestBruteForceEdge(
 );
 
 void handleMissing(
-	const std::vector<uv_t> &uvs,             // The UV coords
+	const std::vector<uv_t> &uvs,             // The Controlling UV coords
+	const std::vector<uv_t> &qPoints,         // The Query uv coordinates
 	const std::vector<edge_t> &borders,       // A list of border edge index pairs
 	const std::vector<size_t> &missing,       // A list of UV indices that weren't found
 	const std::vector<size_t> &borderToTri,   // List of triangle indices that the border edges are part of: borderToTri[borderIdx] = triangleIdx
-	std::vector<size_t> &triIdxs              // List of triangle indices that each uv is contained by: triIdxs[uvIdx] = triangleIdx
+	const std::vector<size_t> &tris,          // the flattened triangle indexes
+	std::vector<size_t> &triIdxs,             // List of triangle indices that each uv is contained by: triIdxs[uvIdx] = triangleIdx
+	std::vector<uv_t> &barys                  // List of barycentric coordinates per query uv
 );

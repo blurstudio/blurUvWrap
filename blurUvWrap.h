@@ -22,6 +22,8 @@ public:
 
     static void* creator();
     static MStatus initialize();
+
+	virtual MStatus compute(const MPlug& plug, MDataBlock& block);
     virtual MStatus deform(MDataBlock& block, MItGeometry& iter, const MMatrix& mat, unsigned int multiIndex);
     static MTypeId id;
 
@@ -36,6 +38,11 @@ public:
 	static MObject aOffsetMult;
 	static MObject aOffsetWeights;
 	static MObject aMismatchHandler;
+
+	static MObject aBindInfos;
+	static MObject aBindBarys;
+	static MObject aBindIdxs;
+	static MObject aBindRanges;
 
 };
 

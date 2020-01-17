@@ -50,14 +50,22 @@ void sweep(
 	std::vector<double> ymxs(numTris), ymns(numTris), xmxs(numTris), xmns(numTris);
 	for (size_t i=0; i<numTris; ++i){
 		size_t a = 3*i;
-		xmns[i] = min(uvs[tris[a]][0], min(uvs[tris[a+1]][0], uvs[tris[a+2]][0]));
-		ymns[i] = min(uvs[tris[a]][1], min(uvs[tris[a+1]][1], uvs[tris[a+2]][1]));
-		xmxs[i] = max(uvs[tris[a]][0], max(uvs[tris[a+1]][0], uvs[tris[a+2]][0]));
-		ymxs[i] = max(uvs[tris[a]][1], max(uvs[tris[a+1]][1], uvs[tris[a+2]][1]));
+		const size_t &ta0 = tris[a];
+		const size_t &ta1 = tris[a+1];
+		const size_t &ta2 = tris[a+2];
+
+		const uv_t &uv0 = uvs[ta0];
+		const uv_t &uv1 = uvs[ta1];
+		const uv_t &uv2 = uvs[ta2];
+		
+		xmns[i] = min(uv0[0], min(uv1[0], uv2[0]));
+		ymns[i] = min(uv0[1], min(uv1[1], uv2[1]));
+		xmxs[i] = max(uv0[0], max(uv1[0], uv2[0]));
+		ymxs[i] = max(uv0[1], max(uv1[1], uv2[1]));
 	}
 
 	std::vector<double> qpx;
-	for (auto & uv : uvs){
+	for (auto & uv : qPoints){
 		qpx.push_back(uv[0]);
 	}
 	std::vector<size_t> qpSIdxs = argsort(qpx);
@@ -73,7 +81,7 @@ void sweep(
 	double mn = xmns[mnIdx];
 
 	out.resize(qPoints.size()); // the tri-index per qPoint
-	missing.resize(qPoints.size()); // Any qPoints that weren't in a triangle
+	barys.resize(qPoints.size()); // the first 2 barycentric coordinates of the query point in the triangle
 
     // skip any triangles to the left of the first query point
     // The algorithm will stop once we hit the last query point
@@ -98,19 +106,23 @@ void sweep(
 				mn = xmns[mnIdx];
 			}
 			else {
-				mn = xmxs[mxSIdxs[-1]] + 1;
+				mn = xmxs[mxSIdxs.back()] + 1;
 			}
 		}
 		else if (qp <= mx){
 			// check query points between adding and removing
 			uv_t qPoint = qPoints[qpIdx];
 			double yv = qPoint[1];
-			// a linear search is faster than more complex collections here
+
+			// a linear search is faster than more complex collections here in my tests
 			bool found = false;
 			for (auto &t : atSet){
 				if (ymns[t] <= yv && yv <= ymxs[t]){
-					if (pointInTri(qPoint, uvs[tris[3*t]], uvs[tris[3*t+1]], uvs[tris[3*t+2]])){
+					double aa, bb;
+					triBary(qPoint, uvs[tris[3 * t]], uvs[tris[3 * t + 1]], uvs[tris[3 * t + 2]], aa, bb);
+					if ((aa >= 0) && (bb >= 0) && (aa + bb <= 1.0)) {
 						out[qpIdx] = t;
+						barys[qpIdx] = { aa, bb };
 						found = true;
 						break;
 					}
@@ -156,7 +168,7 @@ size_t closestBruteForceEdge(
 	// D is the collection of direction vectors
 	// DR2 is the colletion of squared lengths of the direction vectors
 	// Pt is the single point to check
-	double minIdx = 0;
+	size_t minIdx = 0;
 	double minVal = std::numeric_limits<double>::max();
 
 	for (size_t i = 0; i < a.size(); ++i) {
@@ -185,14 +197,15 @@ size_t closestBruteForceEdge(
 	return minIdx;
 }
 
-
-
 void handleMissing(
 	const std::vector<uv_t> &uvs,
+	const std::vector<uv_t> &qPoints,
 	const std::vector<edge_t> &borders,
 	const std::vector<size_t> &missing,
 	const std::vector<size_t> &borderToTri,
-	std::vector<size_t> &triIdxs
+	const std::vector<size_t> &tris,  // the flattened triangle indexes
+	std::vector<size_t> &triIdxs,
+	std::vector<uv_t> &barys
 ) {
 	float tol = 1.0f;
 
@@ -217,10 +230,14 @@ void handleMissing(
 	}
 
 	for (auto &mIdx : missing) {
-		uv_t mp = uvs[mIdx];
+		uv_t mp = qPoints[mIdx];
 		size_t closestEdge = closestBruteForceEdge(starts, bDiff, bLens2, mp);
 		size_t triIdx = borderToTri[closestEdge];
+
+		double b1, b2;
+		triBary(mp, uvs[tris[(3*triIdx)]], uvs[tris[(3*triIdx)+1]], uvs[tris[(3*triIdx)+2]], b1, b2);
 		triIdxs[mIdx] = triIdx;
+		barys[mIdx] = { b1, b2 };
 	}
 }
 

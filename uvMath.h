@@ -1,3 +1,4 @@
+#pragma once
 #include <array>
 #include <cmath>
 
@@ -27,7 +28,7 @@ inline double triArea(const uv_t &a, const uv_t &b, const uv_t &c){
 }
 
 // Get the first two barycentric coordinates of a 2d triangle
-void triBary(const uv_t &p, const uv_t &a, const uv_t &b, const uv_t &c, double &u, double &v) {
+inline void triBary(const uv_t &p, const uv_t &a, const uv_t &b, const uv_t &c, double &u, double &v) {
 	double v0x = a[0] - c[0];
 	double v0y = a[1] - c[1];
 	double v1x = b[0] - c[0];
