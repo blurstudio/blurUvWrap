@@ -10,10 +10,11 @@
 #include <maya/MGPUDeformerRegistry.h>
 #include <maya/MOpenCLInfo.h>
 #include <maya/MFnNumericAttribute.h>
+
 #include <vector>
+#include <unordered_map>
 
 #define DEFORMER_NAME "blurUvWrap"
-
 
 class UvWrapDeformer : public MPxDeformerNode {
 public:
@@ -25,6 +26,8 @@ public:
 
 	virtual MStatus compute(const MPlug& plug, MDataBlock& block);
     virtual MStatus deform(MDataBlock& block, MItGeometry& iter, const MMatrix& mat, unsigned int multiIndex);
+	virtual MStatus setDependentsDirty(const MPlug& plugBeingDirtied, MPlugArray& affectedPlugs);
+
     static MTypeId id;
 
 	static MObject aControlRestMesh;
@@ -43,6 +46,12 @@ public:
 	static MObject aBindBarys;
 	static MObject aBindIdxs;
 	static MObject aBindRanges;
+private:
+
+  std::unordered_map<unsigned, bool> _dirty;
+  std::unordered_map<unsigned, std::vector<double>> _coords;
+  std::unordered_map<unsigned, std::vector<size_t>> _idxs;
+  std::unordered_map<unsigned, std::vector<size_t>> _ranges;
 
 };
 

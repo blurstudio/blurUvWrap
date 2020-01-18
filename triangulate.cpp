@@ -115,6 +115,3 @@ std::vector<tri_t> earclip(const std::vector<size_t> &idxs, const std::vector<uv
 	return out;
 }
 
-
-
-

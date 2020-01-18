@@ -1,4 +1,3 @@
-
 #include "blurUvWrap.h"
 #include "uvQuery.h"
 
@@ -31,8 +30,6 @@
 #include <maya/MFnFloatArrayData.h>
 #include <maya/MFnIntArrayData.h>
 #include <maya/MArrayDataBuilder.h>
-
-
 
 // Get a pointer to the MArrayDataHandle if it exists
 // This is good for dealing with paintable attributes other than the built-in weights
@@ -68,7 +65,7 @@ float readArrayDataPtr(std::unique_ptr<MArrayDataHandle> &ptr, unsigned idx, flo
 }
 
 // Get a mapping from the uv indices to the vertex indices
-void getUvToVert(const MFnMesh &mesh, const MString* uvSet, std::vector<size_t> &uvToVert){
+bool getUvToVert(const MFnMesh &mesh, const MString* uvSet, std::vector<size_t> &uvToVert){
 	MIntArray uvCounts, uvIdxs, vertCounts, vertIdxs;
 	mesh.getAssignedUVs(uvCounts, uvIdxs, uvSet); // numUvsPerFace, flatUvIdxs
 	mesh.getVertices(vertCounts, vertIdxs);
@@ -85,6 +82,7 @@ void getUvToVert(const MFnMesh &mesh, const MString* uvSet, std::vector<size_t> 
 		}
 		uvCursor += uvCounts[faceIdx];
 	}
+	return true;
 }
 
 // Get the array of uvs from a mesh
@@ -107,7 +105,7 @@ edge_t sortEdge(size_t a, size_t b) {
 }
 
 // Parse a mesh and get all the crazy data that I need to get the bind
-void getTriangulation(
+bool getTriangulation(
 	const MFnMesh &mesh, const MString* uvSet,
 
 	std::vector<size_t> &flatUvTriIdxs,   // The flattened uv triangle indexes
@@ -202,12 +200,14 @@ void getTriangulation(
 		borders.push_back(kv.first);
 		borderTriIdx.push_back(kv.second);
 	}
+	return true;
 }
 
 // Given a control and target mesh, get the flattened barycentric bind
-void getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *ctrlUvName, MString *uvName, short projType,
+bool getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *ctrlUvName, MString *uvName, short projType,
 	std::vector<double> &flatBarys, std::vector<size_t> &flatRanges, std::vector<size_t> &flatIdxs
 ) {
+	bool success;
 	// Get the UVs
 	std::vector<uv_t> qPoints = getUvArray(fnRestMesh, uvName);
 	std::vector<uv_t> uvs = getUvArray(fnRestCtrl, ctrlUvName);
@@ -220,27 +220,31 @@ void getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *
 	std::vector<size_t> borderTriIdx;    // Get the triangle index based off the border edge index
 	std::vector<size_t> uvToVert;        // Map from the uvIdx to the vertex Idx
 	std::vector<size_t> flatVertTriIdxs; // Flattened vertex triangle indices
-	getTriangulation(fnRestCtrl, ctrlUvName, flatUvTriIdxs, triToFaceIdx, faceRanges, borderEdges, borderTriIdx, uvToVert, flatVertTriIdxs);
+	success = getTriangulation(fnRestCtrl, ctrlUvName, flatUvTriIdxs, triToFaceIdx, faceRanges, borderEdges, borderTriIdx, uvToVert, flatVertTriIdxs);
+	if (!success) return false;
 
 	// Sweep the UVs
 	std::vector<size_t> triIdxs;     // the tri-index per qPoint
 	std::vector<size_t> missing;     // Any qPoints that weren't in a triangle
 	std::vector<uv_t> barys;         // The barycentric coordinates of each point in the triangle
-	sweep(qPoints, uvs, flatUvTriIdxs, triIdxs, missing, barys);
+	success = sweep(qPoints, uvs, flatUvTriIdxs, triIdxs, missing, barys);
+	if (!success) return false;
 
 	// Project any missing uvs to the closest uv border edge
 	// And add the triangle to the output
-	handleMissing(uvs, qPoints, borderEdges, missing, borderTriIdx, flatUvTriIdxs, triIdxs, barys);
+	success = handleMissing(uvs, qPoints, borderEdges, missing, borderTriIdx, flatUvTriIdxs, triIdxs, barys);
+	if (!success) return false;
 
 	size_t numVerts = fnRestMesh.numVertices();
 	size_t numUVs = fnRestMesh.numUVs(*uvName);
 	std::vector<size_t> qUvToVert; // Map the uvIdx to the vertex idx for the query mesh
-	getUvToVert(fnRestMesh, uvName, qUvToVert);
+	success = getUvToVert(fnRestMesh, uvName, qUvToVert);
+	if (!success) return false;
 
 	// Translate the UV barycentric coordinates to vertices
-	getVertCorrelation(numVerts, numUVs, triIdxs, flatVertTriIdxs, barys, qUvToVert, flatBarys, flatIdxs, flatRanges);
+	success = getVertCorrelation(numVerts, numUVs, triIdxs, flatVertTriIdxs, barys, qUvToVert, flatBarys, flatIdxs, flatRanges);
+	if (!success) return false;
+
+	return true;
 }
-
-
-
 

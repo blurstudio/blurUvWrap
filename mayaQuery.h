@@ -22,13 +22,13 @@ std::unique_ptr<MArrayDataHandle> getArrayDataPtr(
 float readArrayDataPtr(std::unique_ptr<MArrayDataHandle> &ptr, unsigned idx, float defaultVal); 
 
 // Get a mapping from the uv indices to the vertex indices
-void getUvToVert(const MFnMesh &mesh, const MString* uvSet, std::vector<size_t> &uvToVert);
+bool getUvToVert(const MFnMesh &mesh, const MString* uvSet, std::vector<size_t> &uvToVert);
 
 // Get the array of uvs from a mesh
 std::vector<uv_t> getUvArray(const MFnMesh &mesh, const MString* uvSet); 
 
 // Parse a mesh and get all the crazy data that I need to get the bind
-void getTriangulation(
+bool getTriangulation(
 	const MFnMesh &mesh, const MString* uvSet,
 
 	std::vector<size_t> &flatUvTriIdxs,   // The flattened uv triangle indexes
@@ -41,7 +41,7 @@ void getTriangulation(
 );
 
 // Given a control and target mesh, get the flattened barycentric bind
-void getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *ctrlUvName, MString *uvName, short projType,
+bool getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *ctrlUvName, MString *uvName, short projType,
 	std::vector<double> &flatBarys, std::vector<size_t> &flatRanges, std::vector<size_t> &flatIdxs
 ); 
 

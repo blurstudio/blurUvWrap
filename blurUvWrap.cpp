@@ -32,7 +32,6 @@
 #include <maya/MFnIntArrayData.h>
 #include <maya/MArrayDataBuilder.h>
 
-
 #define CHECKSTAT(status, msg) {MStatus tStat = (status);  if ( !tStat ) {  MGlobal::displayError(msg); return tStat; }}
 
 #define MM_UVEDGE  0
@@ -42,29 +41,23 @@
 
 #define EPS 1e-7
 
-
 MTypeId UvWrapDeformer::id(0x00122707);
+
 MObject UvWrapDeformer::aControlRestMesh; // The non-deforming rest of the controller mesh
 MObject UvWrapDeformer::aControlMesh; // The deforming controller mesh
 MObject UvWrapDeformer::aControlInvWorld; // The inverse world of the controller mesh
 MObject UvWrapDeformer::aControlUvName; // The name of the uv channel to sample on the controller mesh
-
 MObject UvWrapDeformer::aRestMesh; // The non-deforming controlled mesh. Usually the Orig object. Multi
 MObject UvWrapDeformer::aUvName; // The name of the uv channel to sample on the deformed object list
-
 MObject UvWrapDeformer::aGlobalOffset; // The global offset multiplier
-
 MObject UvWrapDeformer::aOffsetList; // The compound parent for the per-deformed values. Multi
 	MObject UvWrapDeformer::aOffsetMult; // The per-deformed offset multiplier
 	MObject UvWrapDeformer::aOffsetWeights; // The per-deformed offset weightmap. Mutli
-
 MObject UvWrapDeformer::aMismatchHandler; // Enum for how to handle uvs that don't match perfectly
-
 MObject UvWrapDeformer::aBindInfos; // The compound parent per mesh for bind information
 	MObject UvWrapDeformer::aBindBarys; // The flattened barycentric coordinate list
 	MObject UvWrapDeformer::aBindIdxs; // The flattened vert index list
 	MObject UvWrapDeformer::aBindRanges; // The number of coordinates to mix per vertex
-
 
 void* UvWrapDeformer::creator() { return new UvWrapDeformer(); }
 
@@ -124,11 +117,13 @@ MStatus UvWrapDeformer::initialize() {
 	aOffsetMult = nAttr.create("offset", "of", MFnNumericData::kFloat, 1.0f, &status);
 	CHECKSTAT(status, "Error creating aOffsetMult");
 	nAttr.setKeyable(true);
+
 	// The per-deformed offset weightmap. Mutli. Child of aOffsetList
 	aOffsetWeights = nAttr.create("offsetWeights", "ow", MFnNumericData::kFloat, 1.0f, &status);
 	CHECKSTAT(status, "Error creating aOffsetWeights");
 	nAttr.setArray(true);
 	nAttr.setUsesArrayDataBuilder(true);
+
 	// The compound parent for the per-deformed values. Multi
 	aOffsetList = cAttr.create("offsetList", "ol", &status);
 	CHECKSTAT(status, "Error creating aOffsetList");
@@ -137,7 +132,6 @@ MStatus UvWrapDeformer::initialize() {
 	CHECKSTAT(cAttr.addChild(aOffsetWeights), "Error adding aOffsetWeights");
 	CHECKSTAT(cAttr.addChild(aOffsetMult), "Error adding aOffsetMult");
 	CHECKSTAT(addAttribute(aOffsetList), "Errod adding aOffsetList");
-
 
 	// Enum for how to handle uvs that don't match perfectly
 	aMismatchHandler = eAttr.create("mismatchHandler", "mmh", MM_UVEDGE, &status);
@@ -150,53 +144,37 @@ MStatus UvWrapDeformer::initialize() {
     eAttr.addField("Closest Vertex", MM_VERT);
 	CHECKSTAT(addAttribute(aMismatchHandler), "Error adding aMismatchHandler");
 
+	// Store the flat bind barycentric coords
 	aBindBarys = tAttr.create("bindBarys", "bbs", MFnData::kFloatArray, faData.create(), &status);
 	CHECKSTAT(status, "Error creating aBindBarys");
 	tAttr.setStorable(false);
 
+	// Store the flat indices per barycoord
 	aBindIdxs = tAttr.create("bindIdxs", "bis", MFnData::kIntArray, iaData.create(), &status);
 	CHECKSTAT(status, "Error creating aBindIdxs");
 	tAttr.setStorable(false);
 
+	// Store the range of indices to apply to each deformed vert
 	aBindRanges = tAttr.create("bindRanges", "brs", MFnData::kIntArray, iaData.create(), &status);
 	CHECKSTAT(status, "Error creating aBindRanges");
 	tAttr.setStorable(false);
 
+	// The holder for the bind data
 	aBindInfos = cAttr.create("bindInfos", "bi", &status);
 	CHECKSTAT(status, "Error creating aBindInfos");
 	cAttr.setStorable(false);
 	cAttr.setArray(true);
-	// cAttr.setUsesArrayDataBuilder(true);
+	cAttr.setUsesArrayDataBuilder(true);
 	CHECKSTAT(cAttr.addChild(aBindBarys), "Error adding aBindBarys");
 	CHECKSTAT(cAttr.addChild(aBindIdxs), "Error adding aBindIdxs");
 	CHECKSTAT(cAttr.addChild(aBindRanges), "Error adding aBindRanges");
 	CHECKSTAT(addAttribute(aBindInfos), "Error adding aBindInfos");
 
-
-	CHECKSTAT(attributeAffects(aControlRestMesh, aBindInfos ), "Error affecting aControlRestMesh 1");
-	CHECKSTAT(attributeAffects(aControlRestMesh, aBindBarys ), "Error affecting aControlRestMesh 2");
-	CHECKSTAT(attributeAffects(aControlRestMesh, aBindIdxs  ), "Error affecting aControlRestMesh 3");
-	CHECKSTAT(attributeAffects(aControlRestMesh, aBindRanges), "Error affecting aControlRestMesh 4");
-
-	CHECKSTAT(attributeAffects(aControlUvName, aBindInfos ), "Error affecting aControlUvName 1");
-	CHECKSTAT(attributeAffects(aControlUvName, aBindBarys ), "Error affecting aControlUvName 2");
-	CHECKSTAT(attributeAffects(aControlUvName, aBindIdxs  ), "Error affecting aControlUvName 3");
-	CHECKSTAT(attributeAffects(aControlUvName, aBindRanges), "Error affecting aControlUvName 4");
-
-	CHECKSTAT(attributeAffects(aRestMesh, aBindInfos ), "Error affecting aRestMesh 1");
-	CHECKSTAT(attributeAffects(aRestMesh, aBindBarys ), "Error affecting aRestMesh 2");
-	CHECKSTAT(attributeAffects(aRestMesh, aBindIdxs  ), "Error affecting aRestMesh 3");
-	CHECKSTAT(attributeAffects(aRestMesh, aBindRanges), "Error affecting aRestMesh 4");
-
-	CHECKSTAT(attributeAffects(aUvName, aBindInfos ), "Error affecting aUvName 1");
-	CHECKSTAT(attributeAffects(aUvName, aBindBarys ), "Error affecting aUvName 2");
-	CHECKSTAT(attributeAffects(aUvName, aBindIdxs  ), "Error affecting aUvName 3");
-	CHECKSTAT(attributeAffects(aUvName, aBindRanges), "Error affecting aUvName 4");
-
-	CHECKSTAT(attributeAffects(aMismatchHandler, aBindInfos ), "Error affecting aMismatchHandler 1");
-	CHECKSTAT(attributeAffects(aMismatchHandler, aBindBarys ), "Error affecting aMismatchHandler 2");
-	CHECKSTAT(attributeAffects(aMismatchHandler, aBindIdxs  ), "Error affecting aMismatchHandler 3");
-	CHECKSTAT(attributeAffects(aMismatchHandler, aBindRanges), "Error affecting aMismatchHandler 4");
+	CHECKSTAT(attributeAffects(aControlRestMesh, outputGeom ), "Error affecting aControlRestMesh 1");
+	CHECKSTAT(attributeAffects(aControlUvName, outputGeom ), "Error affecting aControlUvName 1");
+	CHECKSTAT(attributeAffects(aRestMesh, outputGeom ), "Error affecting aRestMesh 1");
+	CHECKSTAT(attributeAffects(aUvName, outputGeom ), "Error affecting aUvName 1");
+	CHECKSTAT(attributeAffects(aMismatchHandler, outputGeom ), "Error affecting aMismatchHandler 1");
 
 	CHECKSTAT(attributeAffects(aControlMesh, outputGeom), "Error affecting aControlMesh");
 	CHECKSTAT(attributeAffects(aControlInvWorld, outputGeom), "Error affecting aControlInvWorld");
@@ -205,80 +183,38 @@ MStatus UvWrapDeformer::initialize() {
 	CHECKSTAT(attributeAffects(aOffsetWeights, outputGeom), "Error affecting aOffsetWeights");
 	CHECKSTAT(attributeAffects(aOffsetList, outputGeom), "Error affecting aOffsetList");
 
-	CHECKSTAT(attributeAffects(aBindBarys,  outputGeom), "Error affecting aBindBarys");
-	CHECKSTAT(attributeAffects(aBindIdxs,   outputGeom), "Error affecting aBindIdxs");
-	CHECKSTAT(attributeAffects(aBindRanges, outputGeom), "Error affecting aBindRanges");
-	CHECKSTAT(attributeAffects(aBindInfos,  outputGeom), "Error affecting aBindInfos");
+	CHECKSTAT(attributeAffects(outputGeom, aBindBarys), "Error affecting aBindBarys");
+	CHECKSTAT(attributeAffects(outputGeom, aBindIdxs), "Error affecting aBindIdxs");
+	CHECKSTAT(attributeAffects(outputGeom, aBindRanges), "Error affecting aBindRanges");
+	CHECKSTAT(attributeAffects(outputGeom, aBindInfos), "Error affecting aBindInfos");
 
 	return MStatus::kSuccess;
+}
+
+MStatus UvWrapDeformer::setDependentsDirty(const MPlug& plugBeingDirtied, MPlugArray& affectedPlugs) {
+	// Extract the geom index from the dirty plug and set the dirty flag so we know that we need to
+	// re-read the binding data.
+	const char * nn = plugBeingDirtied.name().asChar();
+
+	if (plugBeingDirtied.isElement()) {
+		if (plugBeingDirtied == aRestMesh) {
+			// If the rest mesh changes, then recalculate that bind
+			unsigned int geomIndex = plugBeingDirtied.logicalIndex();
+			_dirty[geomIndex] = true;
+		}
+	}
+	else if (plugBeingDirtied == aControlRestMesh) {
+		// If the rest control changes, then recalculate *everything*
+		for (auto &x : _dirty) {
+			x.second = true;
+		}
+	}
+	return MS::kSuccess;
 }
 
 MStatus UvWrapDeformer::compute(const MPlug& plug, MDataBlock &block) {
 	MStatus status;
 	if (plug == aBindInfos || plug == aBindBarys || plug == aBindIdxs || plug == aBindRanges) {
-
-
-
-		// Get the required inputs from the data block
-		MPlug par = plug.parent(&status);
-		if (!status) return status;
-		unsigned multiIndex = par.logicalIndex(&status);
-		if (!status) return status;
-
-		MObject restCtrl = block.inputValue(aControlRestMesh, &status).asMesh();
-		if (restCtrl.isNull()) return MStatus::kInvalidParameter;
-		MFnMesh fnRestCtrl(restCtrl);
-
-		// Get the proper index of the rest mesh
-		MArrayDataHandle haRestMesh = block.inputValue(aRestMesh, &status);
-		haRestMesh.jumpToElement(multiIndex);
-		MDataHandle hRestMesh = haRestMesh.inputValue(&status);
-		MObject restMesh = hRestMesh.asMesh();
-		if (restMesh.isNull()) return MStatus::kInvalidParameter;
-		MFnMesh fnRestMesh(restMesh);
-
-		MString ctrlUvName = block.inputValue(aControlUvName, &status).asString();
-		MString uvName = block.inputValue(aUvName, &status).asString();
-		short projType = block.inputValue(aMismatchHandler, &status).asShort();
-
-		// Get the bind data
-		MFloatArray mFlatBarys;
-		MIntArray mFlatRanges;
-		MIntArray mFlatIdxs;
-		getBindData(fnRestCtrl, fnRestMesh, &ctrlUvName, &uvName, projType, mFlatBarys, mFlatRanges, mFlatIdxs);
-
-		// Set the data to the output plugs
-		// TODO: Fix this, I'm doing it wrong
-		MArrayDataHandle bindList = block.inputArrayValue(aBindInfos);
-		status = bindList.jumpToElement(multiIndex);
-		if (!status) return status;
-		MDataHandle bindHandle = bindList.inputValue(&status);
-		if (!status) return status;
-
-		MFnFloatArrayData fad;
-		MFnIntArrayData iad;
-
-		// TODO: Check if the inputs are connected and only overwrite the data if not
-		MObject moBary = fad.create(mFlatBarys);
-		MDataHandle baryHandle = bindHandle.child(aBindBarys);
-		status = baryHandle.setMObject(moBary);
-		if (!status) return status;
-
-		MObject moIdxs = iad.create(mFlatIdxs);
-		MDataHandle idxHandle = bindHandle.child(aBindIdxs);
-		status = idxHandle.setMObject(moIdxs);
-		if (!status) return status;
-
-		MObject moRanges = iad.create(mFlatRanges);
-		MDataHandle rangeHandle = bindHandle.child(aBindRanges);
-		status = rangeHandle.setMObject(moRanges);
-		if (!status) return status;
-
-		block.setClean(aBindBarys);
-		block.setClean(aBindIdxs);
-		block.setClean(aBindRanges);
-
-
 
 	}
 	else {
@@ -306,61 +242,66 @@ MStatus UvWrapDeformer::deform(
     short projType = block.inputValue(aMismatchHandler, &status).asShort();
 
 
-	/*
-	// Make sure that the plug for this array index exists
-	MArrayDataHandle haBindInfos = block.outputArrayValue(aBindInfos);
-	status = haBindInfos.jumpToElement(multiIndex);
-	MDataHandle hBindInfos, hBindBarys;
-	if (status) {
-		hBindInfos = haBindInfos.inputValue(&status);
+	// If I'm dirty, or this multi-index hasn't been computed yet
+	if (
+		_dirty[multiIndex] ||
+		_coords.find(multiIndex) == _coords.end() ||
+		_idxs.find(multiIndex) == _idxs.end() ||
+		_ranges.find(multiIndex) == _ranges.end()
+	) {
+		// Get the required inputs from the data block
+		MObject restCtrl = block.inputValue(aControlRestMesh, &status).asMesh();
+		if (restCtrl.isNull()) return MStatus::kInvalidParameter;
+		MFnMesh fnRestCtrl(restCtrl);
+
+		// Get the proper index of the rest mesh
+		MArrayDataHandle haRestMesh = block.inputValue(aRestMesh, &status);
+		haRestMesh.jumpToElement(multiIndex);
+		MDataHandle hRestMesh = haRestMesh.inputValue(&status);
+		MObject restMesh = hRestMesh.asMesh();
+		if (restMesh.isNull()) return MStatus::kInvalidParameter;
+		MFnMesh fnRestMesh(restMesh);
+
+		short projType = block.inputValue(aMismatchHandler, &status).asShort();
+
+		MString ctrlUvName = block.inputValue(aControlUvName, &status).asString();
+		MString uvName = block.inputValue(aUvName, &status).asString();
+
+		if (ctrlUvName == NULL) {
+			MStringArray msa;
+			fnCtrlMesh.getUVSetNames(msa);
+			ctrlUvName = msa[0];
+		}
+
+		if (uvName == NULL) {
+			MStringArray msa;
+			fnRestMesh.getUVSetNames(msa);
+			uvName = msa[0];
+		}
+
+		// Get the bind data
+		std::vector<double> flatBarys;
+		std::vector<size_t> flatRanges;
+		std::vector<size_t> flatIdxs;
+		bool success = getBindData(fnRestCtrl, fnRestMesh, &ctrlUvName, &uvName, projType, flatBarys, flatRanges, flatIdxs);
+
+		_coords[multiIndex] = flatBarys;
+		_idxs[multiIndex] = flatIdxs;
+		_ranges[multiIndex] = flatRanges;
+
+		// Get each face-vertex normal and tangent
+		// Average the normals, and take the last tangent found 'cause its an easy algorithm
+		// Re-normalize everything and store in an array of matrices
+		// Get the input point positions in that matrix space, and store
+
+		_dirty[multiIndex] = false;
 	}
-	else {
-		// Make sure to build the array index if it doesn't exist
-		MArrayDataBuilder biBuilder = haBindInfos.builder(&status);
-		if (!status) return status;
-		hBindInfos = biBuilder.addElement(multiIndex, &status);
-	}
-	if (!status) return status;
 
-	// Get the bind data handles for the current index
-	MDataHandle hBindBarys = hBindInfos.child(aBindBarys);
-	MObject oBindBarys = hBindBarys.data();
-	MDataHandle hBindIdxs = hBindInfos.child(aBindIdxs);
-	MObject oBindIdxs = hBindIdxs.data();
-	MDataHandle hBindRanges = hBindInfos.child(aBindRanges);
-	MObject oBindRanges = hBindRanges.data();
+	std::vector<double> flatBarys = _coords[multiIndex];
+	std::vector<size_t> flatIdxs = _idxs[multiIndex];
+	std::vector<size_t> flatRanges = _ranges[multiIndex];
 
-	MFloatArray flatBarys;
-	MIntArray flatIdxs, flatRanges;
-	if (oBindBarys.isNull() || oBindIdxs.isNull() || oBindRanges.isNull()) {
-		// If any of the data is null, build the bind here
-		MFloatArray mFlatBarys;
-		MIntArray mFlatRanges;
-		MIntArray mFlatIdxs;
-		// TODO:
-		// status = getBindData(fnRestCtrl, fnRestMesh, &ctrlUvName, &uvName, projType, mFlatBarys, mFlatRanges, mFlatIdxs);
-
-
-
-	}
-	else {
-		MFnFloatArrayData dBindBarys(oBindBarys, &status);
-		if (!status) return status;
-		flatBarys = dBindBarys.array();
-
-		MFnIntArrayData dBindIdxs(oBindIdxs, &status);
-		if (!status) return status;
-		flatIdxs = dBindIdxs.array();
-
-		MFnIntArrayData dBindRanges(oBindRanges, &status);
-		if (!status) return status;
-		flatRanges = dBindRanges.array();
-	}
-
-
-
-
-
+	if (flatBarys.empty() || flatIdxs.empty() || flatRanges.empty()) return MStatus::kFailure;
 
 	// Because there's no default constructor, get a pointer to a MArrayDataHandle
 	// That way I can just check for null and I don't have to re-walk the data block for the plug I want
@@ -369,6 +310,11 @@ MStatus UvWrapDeformer::deform(
 
 	MPointArray ctrlVerts;
 	fnCtrlMesh.getPoints(ctrlVerts);
+
+
+	// Get each face-vertex normal and tangent
+	// Average the normals, and take the last tangent found 'cause its an easy algorithm
+
 
 	for (; !iter.isDone(); iter.next()) {
 		unsigned idx = iter.index();
@@ -388,7 +334,6 @@ MStatus UvWrapDeformer::deform(
 		iter.setPosition(pt);
 	}
 
-	*/
     return MStatus::kSuccess;
 }
 

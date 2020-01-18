@@ -7,13 +7,10 @@
 #include "uvMath.h"
 #include "uvQuery.h"
 
-
 using std::abs;
 using std::sqrt;
 using std::min;
 using std::max;
-
-
 
 // Build a vector of indexes that sort another vector
 template <typename T>
@@ -34,7 +31,7 @@ std::vector<size_t> argsort(const std::vector<T> &v) {
 
 // Sweep line algorithm for finding which triangle contains a given query point
 // but for a list of query points
-void sweep(
+bool sweep(
 		const std::vector<uv_t> &qPoints, // the UV query points
 		const std::vector<uv_t> &uvs,     // the triangulated UV's
 		const std::vector<size_t> &tris,  // the flattened triangle indexes
@@ -153,6 +150,7 @@ void sweep(
 			}
 		}
 	}
+	return true;
 }
 
 
@@ -196,7 +194,7 @@ size_t closestBruteForceEdge(
 	return minIdx;
 }
 
-void handleMissing(
+bool handleMissing(
 	const std::vector<uv_t> &uvs,
 	const std::vector<uv_t> &qPoints,
 	const std::vector<edge_t> &borders,
@@ -238,11 +236,12 @@ void handleMissing(
 		triIdxs[mIdx] = triIdx;
 		barys[mIdx] = { b1, b2 };
 	}
+	return true;
 }
 
 // Take the uv barycentric mapping and turn it into a vertex barycetnric mapping
 // This is done by averaging the influence when a vertex has multiple uvs
-void getVertCorrelation(
+bool getVertCorrelation(
 	size_t numVerts,                      // The number of vertices in the query mesh
 	size_t numUVs,                        // The number of uvs in the query mesh
 	const std::vector<size_t> &triIdxs,   // The tri-index per query point
@@ -260,11 +259,6 @@ void getVertCorrelation(
 	for (size_t uvIdx = 0; uvIdx < uvToVert.size(); ++uvIdx) {
 		vertToUvs[uvToVert[uvIdx]].push_back(uvIdx);
 	}
-
-	// TODO: If a vert has multiple UV's, ignore any missing unless all are missing
-	// Get the next missing index
-	// If there are no missing indices, then use a highly unlikely index value to test against
-	//size_t miss = (missing.empty()) ? std::numeric_limits<size_t>::max() : missing.front();
 
 	std::vector<std::vector<double>> outBarys;
 	std::vector<std::vector<size_t>> outIdxs;
@@ -317,6 +311,6 @@ void getVertCorrelation(
 		}
 		flatRanges.push_back(flatRanges.back() + count);
 	}
+	return true;
 }
-
 

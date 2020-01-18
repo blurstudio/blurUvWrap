@@ -17,7 +17,7 @@ struct edgeHash {
 };
 
 // Sweep line algorithm for finding which triangle contains each of a list of query points
-void sweep(
+bool sweep(
 	const std::vector<uv_t> &qPoints, // the UV query points
 	const std::vector<uv_t> &uvs,     // the triangulated UV's
 	const std::vector<size_t> &tris,  // the flattened triangle indexes
@@ -36,7 +36,7 @@ size_t closestBruteForceEdge(
 );
 
 // Handle query UVs that aren't in the area covered by the control uv set
-void handleMissing(
+bool handleMissing(
 	const std::vector<uv_t> &uvs,             // The Controlling UV coords
 	const std::vector<uv_t> &qPoints,         // The Query uv coordinates
 	const std::vector<edge_t> &borders,       // A list of border edge index pairs
@@ -47,9 +47,8 @@ void handleMissing(
 	std::vector<uv_t> &barys                  // List of barycentric coordinates per query uv
 );
 
-
 // Take the uv barycentric mapping and turn it into a vertex barycetnric mapping
-void getVertCorrelation(
+bool getVertCorrelation(
 	size_t numVerts,                      // The number of vertices in the query mesh
 	size_t numUVs,                        // The number of uvs in the query mesh
 	const std::vector<size_t> &triIdxs,   // The tri-index per query point
@@ -60,5 +59,4 @@ void getVertCorrelation(
 	std::vector<size_t> &flatIdxs,  // The flattened barycentric indices
 	std::vector<size_t> &flatRanges // The count of barycentric weights per index
 );
-
 
