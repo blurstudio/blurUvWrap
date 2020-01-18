@@ -31,6 +31,10 @@
 #include <maya/MFnFloatArrayData.h>
 #include <maya/MFnIntArrayData.h>
 #include <maya/MArrayDataBuilder.h>
+#include <maya/MMatrix.h>
+#include <maya/MMatrixArray.h>
+#include <maya/MVectorArray.h>
+
 
 #define CHECKSTAT(status, msg) {MStatus tStat = (status);  if ( !tStat ) {  MGlobal::displayError(msg); return tStat; }}
 
@@ -237,10 +241,31 @@ MStatus UvWrapDeformer::deform(
 	if (ctrlMesh.isNull()) return MStatus::kInvalidParameter;
     MFnMesh fnCtrlMesh(ctrlMesh);
 
+	// Get the proper index of the rest mesh
+	MArrayDataHandle haRestMesh = block.inputValue(aRestMesh, &status);
+	haRestMesh.jumpToElement(multiIndex);
+	MDataHandle hRestMesh = haRestMesh.inputValue(&status);
+	MObject restMesh = hRestMesh.asMesh();
+	if (restMesh.isNull()) return MStatus::kInvalidParameter;
+	MFnMesh fnRestMesh(restMesh);
+
     MMatrix cWInv = block.inputValue(aControlInvWorld, &status).asMatrix();
     float globalMult = block.inputValue(aGlobalOffset, &status).asFloat();
     short projType = block.inputValue(aMismatchHandler, &status).asShort();
 
+	MString ctrlUvName = block.inputValue(aControlUvName, &status).asString();
+	if (ctrlUvName == NULL) {
+		MStringArray msa;
+		fnCtrlMesh.getUVSetNames(msa);
+		ctrlUvName = msa[0];
+	}
+
+	MString uvName = block.inputValue(aUvName, &status).asString();
+	if (uvName == NULL) {
+		MStringArray msa;
+		fnRestMesh.getUVSetNames(msa);
+		uvName = msa[0];
+	}
 
 	// If I'm dirty, or this multi-index hasn't been computed yet
 	if (
@@ -254,45 +279,39 @@ MStatus UvWrapDeformer::deform(
 		if (restCtrl.isNull()) return MStatus::kInvalidParameter;
 		MFnMesh fnRestCtrl(restCtrl);
 
-		// Get the proper index of the rest mesh
-		MArrayDataHandle haRestMesh = block.inputValue(aRestMesh, &status);
-		haRestMesh.jumpToElement(multiIndex);
-		MDataHandle hRestMesh = haRestMesh.inputValue(&status);
-		MObject restMesh = hRestMesh.asMesh();
-		if (restMesh.isNull()) return MStatus::kInvalidParameter;
-		MFnMesh fnRestMesh(restMesh);
-
 		short projType = block.inputValue(aMismatchHandler, &status).asShort();
-
-		MString ctrlUvName = block.inputValue(aControlUvName, &status).asString();
-		MString uvName = block.inputValue(aUvName, &status).asString();
-
-		if (ctrlUvName == NULL) {
-			MStringArray msa;
-			fnCtrlMesh.getUVSetNames(msa);
-			ctrlUvName = msa[0];
-		}
-
-		if (uvName == NULL) {
-			MStringArray msa;
-			fnRestMesh.getUVSetNames(msa);
-			uvName = msa[0];
-		}
 
 		// Get the bind data
 		std::vector<double> flatBarys;
 		std::vector<size_t> flatRanges;
 		std::vector<size_t> flatIdxs;
 		bool success = getBindData(fnRestCtrl, fnRestMesh, &ctrlUvName, &uvName, projType, flatBarys, flatRanges, flatIdxs);
+		// Get the source bases and invert them
+		MMatrixArray basis = getMeshBasis(fnRestCtrl, &ctrlUvName);
+		MMatrixArray invBasis;
+		invBasis.setLength(basis.length());
+		for (UINT b = 0; b < basis.length(); ++b) {
+			invBasis[b] = basis[b].inverse();
+		}
+
+		//  Now, for each barycoord, get the point position in that mesh basis space
+		MVectorArray flatOffsets;
+		MPointArray restPts;
+		flatOffsets.setLength(flatIdxs.size());
+		fnRestMesh.getPoints(restPts);
+		for (size_t i = 0; i < flatRanges.size() - 1; ++i) { // vertIdx
+			size_t start = flatRanges[i];
+			size_t end = flatRanges[i+1];
+			MPoint &curPt = restPts[i];
+			for (size_t j = start; j < end; ++j) {
+				flatOffsets[j] = curPt * invBasis[flatIdxs[j]];
+			}
+		}
 
 		_coords[multiIndex] = flatBarys;
 		_idxs[multiIndex] = flatIdxs;
 		_ranges[multiIndex] = flatRanges;
-
-		// Get each face-vertex normal and tangent
-		// Average the normals, and take the last tangent found 'cause its an easy algorithm
-		// Re-normalize everything and store in an array of matrices
-		// Get the input point positions in that matrix space, and store
+		_offsets[multiIndex] = flatOffsets;
 
 		_dirty[multiIndex] = false;
 	}
@@ -300,6 +319,7 @@ MStatus UvWrapDeformer::deform(
 	std::vector<double> flatBarys = _coords[multiIndex];
 	std::vector<size_t> flatIdxs = _idxs[multiIndex];
 	std::vector<size_t> flatRanges = _ranges[multiIndex];
+	MVectorArray flatOffsets = _offsets[multiIndex];
 
 	if (flatBarys.empty() || flatIdxs.empty() || flatRanges.empty()) return MStatus::kFailure;
 
@@ -310,7 +330,7 @@ MStatus UvWrapDeformer::deform(
 
 	MPointArray ctrlVerts;
 	fnCtrlMesh.getPoints(ctrlVerts);
-
+	MMatrixArray basis = getMeshBasis(fnCtrlMesh, &ctrlUvName);
 
 	// Get each face-vertex normal and tangent
 	// Average the normals, and take the last tangent found 'cause its an easy algorithm
@@ -323,17 +343,31 @@ MStatus UvWrapDeformer::deform(
 
 		float oVal = readArrayDataPtr(hOffsetPtr, idx, 1.0);
 
-		MPoint pt;
-		for (unsigned i = flatRanges[idx]; i < flatRanges[idx + 1]; ++i) {
-			pt += (MVector)ctrlVerts[flatIdxs[i]] * flatBarys[i];
+
+		MPoint opt, bpt; // offset point, bindPoint
+		if (oVal > 0.0) {
+			for (unsigned i = flatRanges[idx]; i < flatRanges[idx + 1]; ++i) {
+				opt += (flatOffsets[i] * basis[flatIdxs[i]]) * flatBarys[i];
+			}
 		}
+		if (oVal < 1.0) {
+			for (unsigned i = flatRanges[idx]; i < flatRanges[idx + 1]; ++i) {
+				bpt += (MVector)ctrlVerts[flatIdxs[i]] * flatBarys[i];
+			}
+		}
+		if ((oVal > 0.0) && (oVal < 1.0)) {
+			opt = ((opt - bpt) * oVal) + bpt;
+		}
+		else if (oVal == 0.0) {
+			opt = bpt;
+		}
+
 		if (wVal < 1.0) {
 			MPoint cp = iter.position();
-			pt = ((pt - cp) * wVal) + cp;
+			opt = ((opt - cp) * wVal) + cp;
 		}
-		iter.setPosition(pt);
+		iter.setPosition(opt);
 	}
-
     return MStatus::kSuccess;
 }
 

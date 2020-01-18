@@ -10,6 +10,7 @@
 #include <maya/MGPUDeformerRegistry.h>
 #include <maya/MOpenCLInfo.h>
 #include <maya/MFnNumericAttribute.h>
+#include <maya/MVectorArray.h>
 
 #include <vector>
 #include <unordered_map>
@@ -52,6 +53,7 @@ private:
   std::unordered_map<unsigned, std::vector<double>> _coords;
   std::unordered_map<unsigned, std::vector<size_t>> _idxs;
   std::unordered_map<unsigned, std::vector<size_t>> _ranges;
+  std::unordered_map<unsigned, MVectorArray> _offsets;
 
 };
 

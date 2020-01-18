@@ -30,6 +30,9 @@
 #include <maya/MFnFloatArrayData.h>
 #include <maya/MFnIntArrayData.h>
 #include <maya/MArrayDataBuilder.h>
+#include <maya/MMatrix.h>
+#include <maya/MMatrixArray.h>
+
 
 // Get a pointer to the MArrayDataHandle if it exists
 // This is good for dealing with paintable attributes other than the built-in weights
@@ -247,4 +250,49 @@ bool getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *
 
 	return true;
 }
+
+
+MMatrixArray getMeshBasis(const MFnMesh &fnmesh, const MString * uvSet){
+	// Get the face-vert tangents and normals
+	MFloatVectorArray normals, tangents, binormals, rawTangents;
+	MPointArray points;
+	fnmesh.getVertexNormals(false, normals, MSpace::kObject);
+	fnmesh.getTangents(rawTangents, MSpace::kObject, uvSet);
+	fnmesh.getPoints(points);
+
+	// pick an arbitrary (but consistent) face-vert tangent to use for the basis
+	tangents.setLength(normals.length());
+	MIntArray counts, idxs;
+	fnmesh.getVertices(counts, idxs);
+	size_t ptr = 0;
+	for (size_t faceIdx=0; faceIdx<counts.length(); ++faceIdx){
+		UINT c = counts[faceIdx];
+		for (size_t j=ptr; j<ptr+c; ++j){
+			tangents[idxs[j]] = rawTangents[j];
+		}
+		ptr += c;
+	}
+
+	// Calculate the binormal and build the matrices
+	MMatrixArray meshBasis;
+	meshBasis.setLength(normals.length());
+	for (size_t i=0; i<normals.length(); ++i){
+		const MFloatVector &n = normals[i];
+		const MFloatVector b = n ^ tangents[i];
+		const MFloatVector t = b ^ normals[i];
+		const MPoint &p = points[i];
+
+		// Get a reference and update it directly
+		MMatrix &mat = meshBasis[i];
+		mat[0][0] = b[0]; mat[0][1] = b[1]; mat[0][2] = b[2]; mat[0][3] = 0.0;
+		mat[1][0] = n[0]; mat[1][1] = n[1]; mat[1][2] = n[2]; mat[1][3] = 0.0;
+		mat[2][0] = t[0]; mat[2][1] = t[1]; mat[2][2] = t[2]; mat[2][3] = 0.0;
+		mat[3][0] = p[0]; mat[3][1] = p[1]; mat[3][2] = p[2]; mat[3][3] = 1.0;
+	}
+
+	return meshBasis;
+}
+
+
+
 

@@ -45,3 +45,6 @@ bool getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *
 	std::vector<double> &flatBarys, std::vector<size_t> &flatRanges, std::vector<size_t> &flatIdxs
 ); 
 
+
+MMatrixArray getMeshBasis(const MFnMesh &fnmesh, const MString * uvSet);
+
