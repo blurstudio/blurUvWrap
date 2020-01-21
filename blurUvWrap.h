@@ -11,6 +11,7 @@
 #include <maya/MOpenCLInfo.h>
 #include <maya/MFnNumericAttribute.h>
 #include <maya/MVectorArray.h>
+#include <maya/MPointArray.h>
 
 #include <vector>
 #include <unordered_map>
@@ -25,7 +26,7 @@ public:
     static void* creator();
     static MStatus initialize();
 
-	virtual MStatus compute(const MPlug& plug, MDataBlock& block);
+	//virtual MStatus compute(const MPlug& plug, MDataBlock& block);
     virtual MStatus deform(MDataBlock& block, MItGeometry& iter, const MMatrix& mat, unsigned int multiIndex);
 	virtual MStatus setDependentsDirty(const MPlug& plugBeingDirtied, MPlugArray& affectedPlugs);
 
@@ -53,7 +54,7 @@ private:
   std::unordered_map<unsigned, std::vector<double>> _coords;
   std::unordered_map<unsigned, std::vector<size_t>> _idxs;
   std::unordered_map<unsigned, std::vector<size_t>> _ranges;
-  std::unordered_map<unsigned, MVectorArray> _offsets;
+  std::unordered_map<unsigned, MPointArray> _offsets;
 
 };
 

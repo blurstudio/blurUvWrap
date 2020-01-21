@@ -252,7 +252,7 @@ bool getBindData(const MFnMesh &fnRestCtrl, const MFnMesh &fnRestMesh, MString *
 }
 
 
-MMatrixArray getMeshBasis(const MFnMesh &fnmesh, const MString * uvSet){
+std::vector<MMatrix> getMeshBasis(const MFnMesh &fnmesh, const MString * uvSet){
 	// Get the face-vert tangents and normals
 	MFloatVectorArray normals, tangents, binormals, rawTangents;
 	MPointArray points;
@@ -274,20 +274,32 @@ MMatrixArray getMeshBasis(const MFnMesh &fnmesh, const MString * uvSet){
 	}
 
 	// Calculate the binormal and build the matrices
-	MMatrixArray meshBasis;
-	meshBasis.setLength(normals.length());
+	//MMatrixArray meshBasis;
+	//meshBasis.setLength(normals.length());
+	std::vector<MMatrix> meshBasis;
+	meshBasis.reserve(normals.length());
+
 	for (size_t i=0; i<normals.length(); ++i){
-		const MFloatVector &n = normals[i];
-		const MFloatVector b = n ^ tangents[i];
-		const MFloatVector t = b ^ normals[i];
-		const MPoint &p = points[i];
+		MFloatVector n = normals[i];
+		if (n*n < 1e-14f) n = MFloatVector(0.0f, 1.0f, 0.0f);
+
+		MFloatVector b = (n ^ tangents[i]).normal();
+		if (b*b < 1e-14f) b = MFloatVector(1.0f, 0.0f, 0.0f);
+
+		MFloatVector t = (b ^ n).normal();
+		if (t*t < 1e-14f) t = MFloatVector(0.0f, 0.0f, 1.0f);
+
+		MPoint &p = points[i];
 
 		// Get a reference and update it directly
-		MMatrix &mat = meshBasis[i];
+		//MMatrix &mat = meshBasis[i];
+		MMatrix mat;
 		mat[0][0] = b[0]; mat[0][1] = b[1]; mat[0][2] = b[2]; mat[0][3] = 0.0;
 		mat[1][0] = n[0]; mat[1][1] = n[1]; mat[1][2] = n[2]; mat[1][3] = 0.0;
 		mat[2][0] = t[0]; mat[2][1] = t[1]; mat[2][2] = t[2]; mat[2][3] = 0.0;
 		mat[3][0] = p[0]; mat[3][1] = p[1]; mat[3][2] = p[2]; mat[3][3] = 1.0;
+
+		meshBasis.push_back(mat);
 	}
 
 	return meshBasis;

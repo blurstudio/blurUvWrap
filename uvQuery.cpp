@@ -1,5 +1,6 @@
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 #include <algorithm> // stable_sort
 #include <numeric> // iota
 #include <cmath>
@@ -298,18 +299,25 @@ bool getVertCorrelation(
 	flatBarys.reserve(flatNum);
 	flatIdxs.reserve(flatNum);
 	flatRanges.reserve(numVerts+1);
-	flatRanges.push_back(0);
+	size_t count = 0;
+	flatRanges.push_back(count);
 	for (size_t i = 0; i < outBarys.size(); ++i) {
-		size_t count = 0;
+
+		// use a umap to make sure that we combine the data properly
+		std::unordered_map<size_t, double> clean;
 		for (size_t j = 0; j < outBarys[i].size(); ++j) {
 			double ob = outBarys[i][j];
 			if (ob != 0.0) {
-				count++;
-				flatBarys.push_back(ob);
-				flatIdxs.push_back(outIdxs[i][j]);
+				clean[outIdxs[i][j]] += ob;
 			}
 		}
-		flatRanges.push_back(flatRanges.back() + count);
+
+		for (auto &x : clean) {
+			count++;
+			flatIdxs.push_back(x.first);
+			flatBarys.push_back(x.second);
+		}
+		flatRanges.push_back(count);
 	}
 	return true;
 }

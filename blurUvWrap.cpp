@@ -115,12 +115,16 @@ MStatus UvWrapDeformer::initialize() {
 	aGlobalOffset = nAttr.create("globalOffsetMult", "gom", MFnNumericData::kFloat, 1.0f, &status);
 	CHECKSTAT(status, "Error creating aGlobalOffset");
 	nAttr.setKeyable(true);
+	nAttr.setSoftMin(0.0);
+	nAttr.setSoftMax(1.0);
 	CHECKSTAT(addAttribute(aGlobalOffset), "Error adding aGlobalOffset");
 
 	// The per-deformed offset multiplier. Child of aOffsetList
 	aOffsetMult = nAttr.create("offset", "of", MFnNumericData::kFloat, 1.0f, &status);
 	CHECKSTAT(status, "Error creating aOffsetMult");
 	nAttr.setKeyable(true);
+	nAttr.setSoftMin(0.0);
+	nAttr.setSoftMax(1.0);
 
 	// The per-deformed offset weightmap. Mutli. Child of aOffsetList
 	aOffsetWeights = nAttr.create("offsetWeights", "ow", MFnNumericData::kFloat, 1.0f, &status);
@@ -216,6 +220,7 @@ MStatus UvWrapDeformer::setDependentsDirty(const MPlug& plugBeingDirtied, MPlugA
 	return MS::kSuccess;
 }
 
+/*
 MStatus UvWrapDeformer::compute(const MPlug& plug, MDataBlock &block) {
 	MStatus status;
 	if (plug == aBindInfos || plug == aBindBarys || plug == aBindIdxs || plug == aBindRanges) {
@@ -226,6 +231,7 @@ MStatus UvWrapDeformer::compute(const MPlug& plug, MDataBlock &block) {
 	}
 	return MStatus::kSuccess;
 }
+*/
 
 MStatus UvWrapDeformer::deform(
     MDataBlock& block, MItGeometry& iter,
@@ -287,15 +293,15 @@ MStatus UvWrapDeformer::deform(
 		std::vector<size_t> flatIdxs;
 		bool success = getBindData(fnRestCtrl, fnRestMesh, &ctrlUvName, &uvName, projType, flatBarys, flatRanges, flatIdxs);
 		// Get the source bases and invert them
-		MMatrixArray basis = getMeshBasis(fnRestCtrl, &ctrlUvName);
-		MMatrixArray invBasis;
-		invBasis.setLength(basis.length());
-		for (UINT b = 0; b < basis.length(); ++b) {
-			invBasis[b] = basis[b].inverse();
+		std::vector<MMatrix> basis = getMeshBasis(fnRestCtrl, &ctrlUvName);
+		std::vector<MMatrix> invBasis;
+		invBasis.reserve(basis.size());
+		for (UINT b = 0; b < basis.size(); ++b) {
+			invBasis.push_back(basis[b].inverse());
 		}
 
 		//  Now, for each barycoord, get the point position in that mesh basis space
-		MVectorArray flatOffsets;
+		MPointArray flatOffsets;
 		MPointArray restPts;
 		flatOffsets.setLength(flatIdxs.size());
 		fnRestMesh.getPoints(restPts);
@@ -304,7 +310,8 @@ MStatus UvWrapDeformer::deform(
 			size_t end = flatRanges[i+1];
 			MPoint &curPt = restPts[i];
 			for (size_t j = start; j < end; ++j) {
-				flatOffsets[j] = curPt * invBasis[flatIdxs[j]];
+				auto fo = curPt * invBasis[flatIdxs[j]];
+				flatOffsets[j] = fo;
 			}
 		}
 
@@ -319,7 +326,7 @@ MStatus UvWrapDeformer::deform(
 	std::vector<double> flatBarys = _coords[multiIndex];
 	std::vector<size_t> flatIdxs = _idxs[multiIndex];
 	std::vector<size_t> flatRanges = _ranges[multiIndex];
-	MVectorArray flatOffsets = _offsets[multiIndex];
+	MPointArray flatOffsets = _offsets[multiIndex];
 
 	if (flatBarys.empty() || flatIdxs.empty() || flatRanges.empty()) return MStatus::kFailure;
 
@@ -330,7 +337,7 @@ MStatus UvWrapDeformer::deform(
 
 	MPointArray ctrlVerts;
 	fnCtrlMesh.getPoints(ctrlVerts);
-	MMatrixArray basis = getMeshBasis(fnCtrlMesh, &ctrlUvName);
+	std::vector<MMatrix> basis = getMeshBasis(fnCtrlMesh, &ctrlUvName);
 
 	// Get each face-vertex normal and tangent
 	// Average the normals, and take the last tangent found 'cause its an easy algorithm
@@ -341,7 +348,7 @@ MStatus UvWrapDeformer::deform(
 		float wVal = readArrayDataPtr(hWeightPtr, idx, 1.0) * env;
 		if (wVal == 0.0) continue;
 
-		float oVal = readArrayDataPtr(hOffsetPtr, idx, 1.0);
+		float oVal = readArrayDataPtr(hOffsetPtr, idx, 1.0) * globalMult;
 
 
 		MPoint opt, bpt; // offset point, bindPoint
